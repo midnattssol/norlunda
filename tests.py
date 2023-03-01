@@ -30,19 +30,11 @@ with open("test_cases.cson", "r", encoding="utf-8") as file:
     ]
 
 
-def soundchanges(root_ipa, is_verb=True):
-    """do all Norlunda sound changes."""
-    v = NorlundaChanger(root_ipa, is_verb)
-    out = v.do_all()
-    print(v.print_log())
-    return out
-
-
 def test_strong_words():
     success = 0
     for i in contents:
         changer = nl.NorlundaChanger(i.pgm_root, i.is_verb)
-        result = changer.do_all()
+        result = changer.apply_all()
 
         if nl.romanized(result) == nl.romanized(i.norlunda):
             success += 1

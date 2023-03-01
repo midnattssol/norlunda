@@ -1,37 +1,35 @@
 #!/usr/bin/env python3.10
 # pylint: disable=logging-fstring-interpolation
-"""do all Norlunda sound changes.
+# pylint: disable=too-few-public-methods
+# pylint: disable=unnecessary-lambda-assignment
+"""Do all Norlunda sound changes.
 
 Algorithm:
 https://docs.google.com/document/d/1dwiVkmrtuwR9xIhsP0T7e86MQiujY83cwITTNi-KU8I/edit?usp=sharing
 """
-import re
-import logging
-import functools as ft
-import unicodedata
 import collections as col
 import dataclasses as dc
+import functools as ft
+import re
 import typing as t
+import unicodedata
 
 Q, W, E, R, T = map(t.TypeVar, "QWERT")
 
 # Notes for developers:
 # This IPA representation transcribes overlong vowels as "ɔːː",
 # long vowels as "ɔː", and short vowels as "ɔ".
-VOWELS = "iyuɪʏʊeøɘɵɤoəɛœɜɞʌɔæɐaɶɑɒ"
-STOPS = "pbtdʈɖcɟkɡqɢʡʔ"
-CONSONANTS = "ɸβθðszɣjwlrmnŋpbvtdkɡxŋʷ"
+VOWELS = "aeiouyæøœɐɑɒɔɘəɛɜɞɤɪɵɶʊʌʏ"
+STOPS = "bcdkpqtɖɟɡɢʈʔʡ"
+CONSONANTS = "bcdjklmnpqrstvwxzðŋɖɟɡɢɣɸʈʔʡʷβθ"
 APPROXIMANTS = "wjzl"
-CONSONANTS_NAPPROX = "".join(sorted(set(CONSONANTS) - {*APPROXIMANTS}))
-
-
-def do_changed(func: callable, val: T) -> (bool, T):
-    result = func(val)
-    return result != val, result
+CONSONANTS_NAPPROX = "".join(sorted(set(CONSONANTS) - set(APPROXIMANTS)))
 
 
 @dc.dataclass
 class Change:
+    """Dataclass for documenting changes in a word."""
+
     string: str
     result: str
     description: str
@@ -49,7 +47,7 @@ class Change:
         )
 
 
-def indent_rule(func):
+def indent_rule(func: callable) -> callable:
     """Decorator that indents the rule number."""
 
     def inner(self, *a, **kw):
@@ -63,6 +61,8 @@ def indent_rule(func):
 
 @dc.dataclass
 class NorlundaChanger:
+    """Change a word according to the rules for Norlunda."""
+
     word: str
     is_verb: bool = True
     log: list = dc.field(default_factory=list)
@@ -72,50 +72,52 @@ class NorlundaChanger:
     def __post_init__(self):
         self._initial = self.word
 
-    def do(self, fn, description, *a, **kw):
+    def apply(self, func: callable, description: str, *a, **kw):
+        """Perform a function on the word."""
         self.rule[-1] += 1
         prev = self.word
-        result = fn(*a, **kw)
+        result = func(*a, **kw)
         if description and prev != result:
             self.log.append(Change(prev, result, description, self.rule))
         self.word = result
         return self
 
-    def do_all(self):
+    def apply_all(self):
         """do all Norlunda sound changes."""
         self.rule = [0]
         self.do_sub("remove stress markers", "'", "")
         self.do_sub("normalize length markers", ":", "ː")
 
-        # monad = ChangeLoggerMonad(self.word, log_infinitive=self.is_verb)
-        self.do(self.vowel_weakening, "weaken vowels")
-        self.do(a_umlaut, "do a-umlaut", is_verb=self.is_verb, root_ipa=self.word)
-        self.do(
+        self.apply(self.vowel_weakening, "weaken vowels")
+        self.apply(a_umlaut, "do a-umlaut", is_verb=self.is_verb, root_ipa=self.word)
+        self.apply(
             a_umlaut_approximants,
             "do a-umlaut for approximants",
             is_verb=self.is_verb,
             word=self.word,
         )
-        self.do(i_umlaut, "do i-umlaut", is_verb=self.is_verb, root_ipa=self.word)
+        self.apply(i_umlaut, "do i-umlaut", is_verb=self.is_verb, root_ipa=self.word)
 
         if self.is_verb:
-            self.do(self.infinitive_merger, "merge infinitives")
+            self.apply(self.infinitive_merger, "merge infinitives")
 
-        self.do(self.stem_merger, "merge stems")
-        self.do(r_umlaut, "do r-umlaut", word=self.word)
-        self.do(syllable_reduction, "reduce syllables", word=self.word)
-        self.do(self.consonant_shortening, "shorten consonants")
-        self.do(self.fricative_shift, "shift fricatives")
-        self.do(self.vowel_shelving, "shelf vowels")
+        self.apply(self.stem_merger, "merge stems")
+        self.apply(r_umlaut, "do r-umlaut", word=self.word)
+        self.apply(syllable_reduction, "reduce syllables", word=self.word)
+        self.apply(self.consonant_shortening, "shorten consonants")
+        self.apply(self.fricative_shift, "shift fricatives")
+        self.apply(self.vowel_shelving, "shelf vowels")
 
         self.rule = None
         return self.word
 
     def do_sub(self, description, *a, **kw):
+        """Perform a substitution."""
         func = lambda: re.sub(*a, self.word, **kw)
-        return self.do(func, description)
+        return self.apply(func, description)
 
     def print_log(self):
+        """Print the log statements."""
         self.log = sorted(self.log, key=lambda x: x.rule)
         return (
             f"# Log for word *{self._initial}*" + "\n\n" + "\n".join(map(str, self.log))
@@ -139,6 +141,7 @@ class NorlundaChanger:
 
     @indent_rule
     def fricative_shift(self):
+        """Apply the fricative shift."""
         self.do_sub("b after a vowel becomes v", rf"([{VOWELS}]ː*)b", r"\1v")
         self.do_sub("b after a consonant becomes f", rf"([{CONSONANTS}])b", r"\1f")
 
@@ -189,6 +192,7 @@ class NorlundaChanger:
 
     @indent_rule
     def vowel_shelving(self):
+        """Apply the vowel shelving."""
         self.do_sub("ā becomes /ɑɪ/", r"aː", r"ɑɪ")
         self.do_sub("æ becomes /eː/ when preceding r", r"æ(r)", r"eː\1")
         self.do_sub("ǣ becomes /æ/ or /ɑɪ/ when terminal", r"æː$", r"æ")
@@ -204,6 +208,7 @@ class NorlundaChanger:
 
     @indent_rule
     def stem_merger(self):
+        """Apply the stem merger."""
         self.do_sub("drop terminal -ja after stops", rf"([{STOPS}])ja$", r"\1")
         self.do_sub("drop terminal -az/-iz/-uz", r"[aiu]z$", r"")
         # This should only be dropped if used as a grammatical marker,
@@ -285,28 +290,29 @@ class NorlundaChanger:
 
 def romanized(root_ipa):
     """Transcribe Norlunda according to the romanization system."""
-    root_ipa = re_sub_many(
-        root_ipa,
-        ("ɑi", "ei"),
-        (r"ɑu", r"ou"),
-        (r"[ɑɔ]", r"a"),
-        (r"æː?", r"ae"),
-        (r"ɛ", r"e"),
-        (r"oː", r"o"),
-        (r"(.)ː", r"\1\1"),
-        (r"ː", r""),
-        (r"ʊ", r"u"),
-        (r"ts", r"z"),
-        (r"ʃ", r"sh"),
-        (r"ks", r"x"),
-        (r"ŋ", r"ng"),
-        (r"ɾ", "r"),
-        (r"ɪ", "i"),
-    )
-
     # The ɾ should not occur in the narrow transcription in this file,
     # but is included for completeness
-    return root_ipa
+    return ft.reduce(
+        lambda left, right: re.sub(*right, left),
+        (
+            ("ɑi", "ei"),
+            (r"ɑu", r"ou"),
+            (r"[ɑɔ]", r"a"),
+            (r"æː?", r"ae"),
+            (r"ɛ", r"e"),
+            (r"oː", r"o"),
+            (r"(.)ː", r"\1\1"),
+            (r"ː", r""),
+            (r"ʊ", r"u"),
+            (r"ts", r"z"),
+            (r"ʃ", r"sh"),
+            (r"ks", r"x"),
+            (r"ŋ", r"ng"),
+            (r"ɾ", "r"),
+            (r"ɪ", "i"),
+        ),
+        root_ipa,
+    )
 
 
 def pgm_root_to_ipa(pgm_root: str) -> str:
@@ -343,12 +349,6 @@ def pgm_root_to_ipa(pgm_root: str) -> str:
     return out
 
 
-def split_grammatical_suffixes(word: str) -> [str, str]:
-    """Separate grammatical suffixes from the root."""
-    v = filter(None, re.split("h?(az)$", word))
-    return [*v, ""][:2]
-
-
 def remove_infinitive_except_one_syllable(function):
     """Removes the infinitive up to the last syllable.
 
@@ -361,18 +361,15 @@ def remove_infinitive_except_one_syllable(function):
         syllables = split_syllables(root_ipa)
         syllables = list(filter(None, syllables))
 
-        infinitive = split_syllables(infinitive)
-        if len(infinitive) > 1 and any(infinitive):
-            i = next(filter(lambda x: x[1], enumerate(infinitive)))[0]
-            syllables.append(infinitive[i])
-            infinitive = "".join(infinitive[:i] + infinitive[i + 1 :])
-        else:
-            infinitive = infinitive[0]
+        infinitive_iter = split_syllables(infinitive)
+        if len(infinitive_iter) > 1 and any(infinitive_iter):
+            # Get the first truthy item in the infinitive.
+            i = next(filter(lambda x: x[1], enumerate(infinitive_iter)))[0]
+            syllables.append(infinitive_iter[i])
+            infinitive = "".join(infinitive_iter[:i] + infinitive_iter[i + 1 :])
 
         output = function("".join(syllables))
-
-        if infinitive:
-            output += infinitive
+        output += infinitive
         return output
 
     return inner
@@ -396,34 +393,63 @@ def split_syllables(word: str) -> t.List[str]:
         out = re.sub(f"(([{VOWELS}]ː*)+)", r".\1", out)
     else:
         out = re.sub(f"(([{VOWELS}]ː*)+)", r"\1.", out)
-    out = out.strip(".")
-    out = out.split(".")
+    out = out.strip(".").split(".")
 
-    if len(out) < 2:
-        return out
-
-    if not re.search(f"[{VOWELS}]", out[-1]):
+    if len(out) >= 2 and not re.search(f"[{VOWELS}]", out[-1]):
         val = out.pop()
         out[-1] += val
 
     return out
 
 
-def re_sub_many(word: str, *regexes: [[str, str]]) -> str:
-    """do a sequence of regexes to a word."""
-    return ft.reduce(lambda left, right: re.sub(*right, left), regexes, word)
+def split_grammatical_suffixes(word: str) -> [str, str]:
+    """Separate grammatical suffixes from the root."""
+    truthy = filter(None, re.split("h?(az)$", word))
+    return [*truthy, ""][:2]
 
 
 # ===| Sound changes |===
 
 
 def a_umlaut_approximants(word: str, is_verb: bool = True):
+    """Handle the approximants part of the a-umlaut."""
     infinitive = ""
     if is_verb:
         word, infinitive = split_off_infinitive(word)
     word = re.sub(r"i([jlrw])", r"e\1", word)
     word = re.sub(r"u([jlrw])", r"o\1", word)
     return word + infinitive
+
+
+def syllable_reduction(word: str) -> str:
+    """Handle the syllable reduction stage."""
+    word = re.sub(r"aː*weː*", r"aː", word)
+    word = re.sub(r"eː*w[eo]ː*", r"oː", word)
+    word = re.sub(r"eː*wuː*", r"uː", word)
+
+    syllables = split_syllables(word)
+
+    if len(syllables) == 3:
+        middle = syllables.pop(1)
+        middle = re.sub(rf"h?[{VOWELS}]ː*", r"", middle)
+        syllables[0] += middle
+    elif len(syllables) == 2:
+        syllables[1] = re.sub(r"h?[æeiu]ː*", r"", syllables[1])
+
+    word = "".join(filter(None, syllables))
+    word = re.sub(r"gs", r"ks", word)
+    return word
+
+
+def r_umlaut(word: str) -> str:
+    """Perform r-umlaut."""
+    word = re.sub("æ(z|s$)", "er", word)
+    word = re.sub("i(z|s$)", "er", word)
+    word = re.sub("ai(z|s$)", "eːr", word)
+    word = re.sub("au(z|s$)", "or", word)
+    word = re.sub("z", "r", word)
+    word = re.sub(f"([{VOWELS}]ː*)s$", r"\1r", word)
+    return word
 
 
 def umlaut_factory(name: str, trigger: callable, subs: tuple) -> callable:
@@ -483,32 +509,3 @@ i_umlaut = umlaut_factory(
         (r"a(?![yui])", r"e"),
     ],
 )
-
-
-def syllable_reduction(word: str) -> str:
-    word = re.sub(r"aː*weː*", r"aː", word)
-    word = re.sub(r"eː*w[eo]ː*", r"oː", word)
-    word = re.sub(r"eː*wuː*", r"uː", word)
-
-    syllables = split_syllables(word)
-
-    if len(syllables) == 3:
-        middle = syllables.pop(1)
-        middle = re.sub(rf"h?[{VOWELS}]ː*", r"", middle)
-        syllables[0] += middle
-    elif len(syllables) == 2:
-        syllables[1] = re.sub(r"h?[æeiu]ː*", r"", syllables[1])
-
-    word = "".join(filter(None, syllables))
-    word = re.sub(r"gs", r"ks", word)
-    return word
-
-
-def r_umlaut(word: str) -> str:
-    word = re.sub("æ(z|s$)", "er", word)
-    word = re.sub("i(z|s$)", "er", word)
-    word = re.sub("ai(z|s$)", "eːr", word)
-    word = re.sub("au(z|s$)", "or", word)
-    word = re.sub("z", "r", word)
-    word = re.sub(f"([{VOWELS}]ː*)s$", r"\1r", word)
-    return word
