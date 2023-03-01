@@ -1,0 +1,11 @@
+{
+  "$id": "/schemas/address",
+
+  "type": "object",
+  "properties": {
+    "norlunda": { "type": "string" },
+    "proto-germanic": { "type": "string" },
+    "english": { "type": "string" },
+  },
+  "required": ["norlunda", "proto-germanic", "english"]
+}

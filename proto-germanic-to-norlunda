@@ -1,7 +1,6 @@
 #!/usr/bin/env python3.10
 """Provide the command-line interface."""
 import argparse
-import pathlib as p
 import norlunda as nl
 
 
@@ -18,13 +17,12 @@ def main() -> None:
     # parser.add_argument(
     #     "--file",
     #     type=p.Path,
-    #     help="a JSON file containing the words to apply the sound change to",
+    #     help="a JSON file containing the words to apply the sound change to (pass -) for stdin",
     # )
 
     args = parser.parse_args()
     k = map(nl.soundchanges, args.words)
     print(" ".join(k))
-    # print(args.accumulate(args.integers))
 
 
 if __name__ == "__main__":
